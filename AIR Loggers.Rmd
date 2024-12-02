@@ -1,0 +1,214 @@
+---
+title: "AIR"
+author: "Jon Hart"
+date: "2024-03-26"
+output: html_document
+---
+
+## ONON
+
+```{r}
+# Load required packages
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(writexl)
+library(ISOweek)
+library(Hmisc)
+
+Onon_Air <- read_excel("Onon/Air/Onon_Air_Master.xlsx")
+```
+
+# Temp Thresholds 18, 21, 15 C
+```{r}
+
+tempthreshold_all<- Onon_Air %>%
+  group_by(logger_id) %>% 
+  summarise(days_max_18 = sum(max_temp > 18),
+            days_max_21 = sum(max_temp > 21),
+            days_max_25 = sum(max_temp > 25),
+            days_mean_18 = sum(mean_temp > 18),
+            days_mean_21 = sum(mean_temp > 21),
+            days_mean_25 = sum(mean_temp > 25)
+            )
+
+tempthreshold_summer <- Onon_Air %>% 
+  filter(longdate > '2023-06-14' & longdate < '2023-09-16') %>% 
+  group_by(logger_id) %>%
+  summarise(summdays_max_18 = sum(max_temp > 18),
+            summdays_max_21 = sum(max_temp > 21),
+            summdays_max_25 = sum(max_temp > 25),
+            summdays_mean_18 = sum(mean_temp > 18),
+            summdays_mean_21 = sum(mean_temp > 21),
+            summdays_mean_25 = sum(mean_temp > 25)
+            )
+
+tempthreshold_summary <- tempthreshold_all %>% 
+  left_join(tempthreshold_summer, by="logger_id")
+
+write_xlsx(tempthreshold_summary,"E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Onon/Air/tempthreshold_summary.xlsx")
+```
+
+```{r}
+weekly_temp_stats <- Onon_Air %>%
+  mutate(week = isoweek(longdate)) %>% 
+  filter(longdate > '2023-06-14' & longdate < '2023-09-16') %>% 
+  group_by(logger_id, week) %>% 
+  summarise(mean_weekly_temp = round(mean(mean_temp),digits=2))
+            
+max_weekly <- weekly_temp_stats %>%    
+  group_by(logger_id) %>% 
+  summarise(max_avg_temp = max(mean_weekly_temp)) 
+
+write_xlsx(max_weekly,"E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Onon/Air/max_weekly.xlsx")
+```
+
+```{r}
+
+water <- read_excel("Onon/Water/Onon_Water_Master.xlsx") %>% 
+  mutate(water_mean = mean_temp) %>% 
+  mutate(longdate = make_date(year,month,day)) %>% 
+  filter(longdate > '2023-06-14' & longdate < '2023-09-16') %>% 
+  filter(logger_id == '21459983') 
+
+air <- read_excel("Onon/Air/Onon_Air_Master.xlsx") %>% 
+  mutate(air_mean = mean_temp) %>% 
+  mutate(longdate = make_date(year,month,day)) %>% 
+  filter(longdate > '2023-06-14' & longdate < '2023-09-16') %>% 
+  filter(logger_id == '21464267')
+
+airwater_join <- water %>% 
+  left_join(air, by = "longdate")
+
+```
+
+
+```{r}
+lm_eqn <- function(df){
+    m <- lm(water_mean ~ air_mean, df);
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}                 
+
+ggplot(airwater_join, aes(x=air_mean, y = water_mean)) +
+  geom_point(color='blue') +
+  geom_smooth(method = "lm", se = TRUE, colour = 'black') +
+  theme_light() + 
+  labs(title="Camp Code B2",
+       subtitle = "6/15/2022 – 9/15/2023",
+       x="Air temperature (°C)",
+       y="Water temperature (°C)") +
+  geom_text(x = 10, y = 16, label = lm_eqn(airwater_join), parse = TRUE) +
+  geom_text(x = 10, y = 15, label = "Pearson r = 0.73")
+
+# Pearsons correlation coefficient
+correlation <- cor(airwater_join$water_mean, airwater_join$air_mean, method = 'pearson')
+
+ggsave(file="Onon/Camp_B2.png", height = 5, width = 10)
+
+# ggplot(B2, aes(x=as.Date(longdate), y = mean_temp, color = type)) +
+#   geom_point() +
+#   geom_smooth(method = "lm", aes(color = type)) 
+```
+## DELGER
+
+```{r}
+Delger_Air <- read_excel("Delger/Delger_Air_Master.xlsx")
+```
+
+
+```{r}
+tempthreshold_all<- Delger_Air %>%
+  group_by(logger_id) %>% 
+  summarise(days_max_18 = sum(max_temp > 18),
+            days_max_21 = sum(max_temp > 21),
+            days_max_25 = sum(max_temp > 25),
+            days_mean_18 = sum(mean_temp > 18),
+            days_mean_21 = sum(mean_temp > 21),
+            days_mean_25 = sum(mean_temp > 25)
+            )
+weekly_temp_stats1 <- Delger_Air %>%
+  mutate(week = isoweek(longdate)) %>% 
+  filter(longdate > '2022-07-12' & longdate < '2022-09-16') 
+
+weekly_temp_stats2 <- Delger_Air %>%
+  mutate(week = isoweek(longdate)) %>% 
+  filter(longdate > '2023-06-14' & longdate < '2023-07-13') 
+
+weekly_temp_stats <- rbind(weekly_temp_stats1,weekly_temp_stats2)
+
+tempthreshold_summer <- weekly_temp_stats %>% 
+  group_by(logger_id) %>%
+  summarise(summdays_max_18 = sum(max_temp > 18),
+            summdays_max_21 = sum(max_temp > 21),
+            summdays_max_25 = sum(max_temp > 25),
+            summdays_mean_18 = sum(mean_temp > 18),
+            summdays_mean_21 = sum(mean_temp > 21),
+            summdays_mean_25 = sum(mean_temp > 25)
+            )
+
+tempthreshold_summary <- tempthreshold_all %>% 
+  left_join(tempthreshold_summer, by="logger_id")
+
+write_xlsx(tempthreshold_summary,"E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Delger/tempthreshold_summary.xlsx")
+```
+
+```{r}
+weekly_temp_stats_summary <- weekly_temp_stats %>%
+  group_by(logger_id, week) %>% 
+  summarise(mean_weekly_temp = round(mean(mean_temp),digits=2))
+            
+max_weekly <- weekly_temp_stats_summary %>%    
+  group_by(logger_id) %>% 
+  summarise(max_avg_temp = max(mean_weekly_temp)) 
+
+write_xlsx(max_weekly,"E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Delger/max_weekly.xlsx")
+```
+
+```{r}
+water <- weekly_temp_stats %>% 
+  mutate(water_mean = mean_temp) %>% 
+  mutate(longdate = make_date(year,month,day)) %>% 
+  filter(logger_id == '21433140') 
+
+air <- weekly_temp_stats %>% 
+  mutate(air_mean = mean_temp) %>% 
+  mutate(longdate = make_date(year,month,day)) %>% 
+  filter(logger_id == '21433138')
+
+airwater_join <- water %>% 
+  left_join(air, by = "longdate")
+```
+
+```{r}
+lm_eqn <- function(df){
+    m <- lm(water_mean ~ air_mean, df);
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}                 
+
+ggplot(airwater_join, aes(x=air_mean, y = water_mean)) +
+  geom_point(color='blue') +
+  geom_smooth(method = "lm", se = TRUE, colour = 'black') +
+  theme_light() + 
+  labs(title="Camp Code C3",
+       subtitle = "Summer '22/'23",
+       x="Air temperature (°C)",
+       y="Water temperature (°C)") +
+  geom_text(x = 10, y = 20, label = lm_eqn(airwater_join), parse = TRUE) +
+  geom_text(x = 10, y = 18, label = "Pearson r = 0.85")
+
+# Pearsons correlation coefficient
+correlation <- cor(airwater_join$water_mean, airwater_join$air_mean, method = 'pearson')
+
+ggsave(file="Delger/Camp_C3.png", height = 5, width = 10)
+
+```
+

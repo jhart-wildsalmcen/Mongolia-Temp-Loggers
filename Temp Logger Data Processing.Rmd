@@ -1,0 +1,161 @@
+---
+title: "Temp Data Analysis"
+author: "Jon Hart"
+date: "2023-11-28"
+output: html_document
+---
+
+```{r}
+# Load required packages
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(writexl)
+library(ISOweek)
+
+setwd("")
+
+# Read in coordinate list
+coordinates <- read_excel("coordinates_master.xlsx")
+class(coordinates$logger_id) = "character"
+
+```
+
+# XLSX File
+```{r}
+#.xlsx file
+# Set working directory accordingly and change file name and logger_id lines as needed
+
+setwd("")
+
+temp_data <- read_excel("Raw_Data/Air/21679154.xlsx") %>% 
+  clean_names() %>% 
+  mutate("logger_id"="21679154",
+         "type"="Air") %>% 
+  select(-number) %>% 
+#  rename("date"= "date_time_pdt",
+#         "temp" = "ch_1_temperature_c") %>% 
+  rename("date"= "date_time_mongolia_standard_time",
+         "temp" = "temperature_c") %>% 
+  separate('date',
+          into = c('longdate', 'time'),
+          sep= ' ') %>% 
+  separate('longdate',
+                  into = c('year', 'month', 'day'),
+                  sep= '-',
+                  remove = FALSE) 
+
+temp_data <- merge(temp_data, coordinates, by="logger_id") 
+logger_id <- temp_data$logger_id
+
+```
+
+# CSV File
+```{r}
+#.csv file
+
+temp_data <- read_csv("Onon/Water/21459983.csv") %>% 
+  clean_names() %>% 
+  mutate("logger_id"="21459983",
+         "type"="Water") %>% 
+  separate('date',
+          into = c('longdate', 'time'),
+          sep= ' ') %>% 
+  mutate(longdate = as.Date(longdate, format="%m/%d/%Y")) %>%  
+  separate('longdate',
+                  into = c('year', 'month', 'day'),
+                  sep= '-',
+                  remove = FALSE)
+
+temp_data <- merge(temp_data, coordinates, by="logger_id") 
+ logger_id <- temp_data$logger_id
+```
+ 
+# Date check
+```{r}
+# Check whether the dataset loaded correctly using head(), which will show us the first few rows of the dataset.
+
+head(temp_data)
+
+# Check the number of rows using nrow() to see whether it’s the same as the excel or csv file.
+
+nrow(temp_data)
+```
+
+
+# Analysis of daily min,max,mean temperatures
+```{r}
+# Calculate daily mean/min/max for temperature
+
+daily_temp_stats <- temp_data %>%
+  group_by(logger_id,type, year, month, day, longdate, lat, long) %>%
+  summarise(mean_temp = round(mean(temp),digits=2),
+            min_temp = round(min(temp),digits=2),
+            max_temp = round(max(temp),digits=2))
+
+# write_xlsx(daily_temp_stats,"G:/Shared drives/Science Program/7. Data/Data Analysis Tools/Delger/daily_temp_stats.xlsx")
+
+# Weekly mean/min/max for temperature
+
+weekly_temp_stats <- temp_data %>%
+  mutate(week = isoweek(longdate)) %>% 
+  group_by(logger_id, type,year, week) %>%
+  summarise(mean_temp = round(mean(temp),digits=2),
+            min_temp = round(min(temp),digits=2),
+            max_temp = round(max(temp),digits=2)) 
+
+# write_xlsx(weekly_temp_stats,"G:/Shared drives/Science Program/7. Data/Data Analysis Tools/Delger/weekly_temp_stats.xlsx")
+
+# Monthly mean/min/max for temperature
+
+monthly_temp_stats <- temp_data %>%
+  mutate(longdate = make_date(year,month)) %>% 
+  group_by(logger_id, type, year,month,longdate) %>%
+  summarise(mean_temp = round(mean(temp),digits=2),
+            min_temp = round(min(temp),digits=2),
+            max_temp = round(max(temp),digits=2)) 
+
+month_min <- temp_data %>% 
+  group_by(year,month) %>% 
+  slice(which.min(temp))
+
+month_max <- temp_data %>% 
+  group_by(year,month) %>% 
+  slice(which.max(temp)) 
+```
+
+# Figure of daily/monthly stats
+```{r}
+minmax_plot <- ggplot() +
+  geom_line(data=monthly_temp_stats, aes(x=as.Date(longdate),y=mean_temp), linewidth =1,color='black') +
+  geom_line(data=daily_temp_stats, aes(x=as.Date(longdate),y=min_temp), linewidth =0.3, color='blue') +
+  geom_line(data=daily_temp_stats, aes(x=as.Date(longdate), y=max_temp), linewidth =0.3, color = 'red') +
+  geom_text(data = month_min, aes(x=as.Date(longdate), y=temp, label=round(temp,digits=1)), nudge_y = -2,color='blue') +
+  geom_text(data = month_max, aes(x=as.Date(longdate), y=temp, label=round(temp,digits=1)), nudge_y = 2,color='red') +
+  geom_point(data=month_min, aes(x=as.Date(longdate), y=temp), color='blue', size=2) + 
+  geom_point(data=month_max, aes(x=as.Date(longdate), y=temp), color='red', size=2) +
+  
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %y")+
+  scale_y_continuous(breaks = seq(-40,50,by=5)) +
+  theme_bw()+
+  labs(title= "Min/Max Daily Temps + Monthly Mean & Monthly Min/Max Temps", subtitle=logger_id, y="Temperature (°C)", x="Date")
+minmax_plot
+
+# Change file name 
+ggsave(file="Onon/Air/Hobo_21464269.png", height = 7, width = 15)
+```
+
+
+
+```{r}
+Onon_Air <- read_excel("Onon/Air/Onon_Air_Master.xlsx")
+
+Onon_Air <- rbind(Onon_Air,daily_temp_stats)
+
+write_xlsx(Onon_Air,"E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Onon/Air/Onon_Air_Master.xlsx")
+```
+
+
+
+

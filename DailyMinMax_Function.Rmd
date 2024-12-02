@@ -1,0 +1,55 @@
+---
+title: "Daily MinMaxMean Function
+author: "Jon Hart"
+date: "2023-12-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load packages
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(writexl)
+
+# Set working directory where list of files located
+setwd("E:/Projects/DelgerOnon_Temp_Data/TempDataProcessing/Test")
+
+# Create file name list for loop
+fs <- list.files(path = ".", pattern = ".xlsx")
+
+# Loop through file directory and export processed tables
+for (f in fs) {
+
+ temp <- read_xlsx(f) %>% 
+ clean_names() %>% 
+ # mutate("logger_id"="21679177",
+ #        "type"="NA") %>% 
+  select(-number) %>% 
+ # rename("date"= "date_time_pdt",
+ #        "temp" = "ch_1_temperature_c") %>% 
+  rename("date"= "date_time_mongolia_standard_time",
+         "temp" = "ch_1_temperature_c") %>% 
+  separate('date',
+          into = c('longdate', 'time'),
+          sep= ' ') %>% 
+  separate('longdate',
+                  into = c('year', 'month', 'day'),
+                  sep= '-',
+                  remove = FALSE) 
+ 
+  daily_temp_stats <- temp %>%
+  group_by(year, month, day, longdate) %>%
+  summarise(mean_temp = round(mean(temp),digits=2),
+            min_temp = round(min(temp),digits=2),
+            max_temp = round(max(temp),digits=2))
+ 
+write_xlsx(daily_temp_stats, gsub('.xlsx', '_processed.xlsx', f))
+}
+```
+
+
